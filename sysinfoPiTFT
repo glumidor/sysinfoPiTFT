@@ -1,0 +1,381 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:           sysinfoTFT
+# Required-Start:    hostname $local_fs
+# Required-Stop:
+# Should-Start:
+# Default-Start:     1 2 3 4 5
+# Default-Stop:
+# Short-Description: shows sysinfo after booting
+# Description:       before logging in it shows ram an disk usage and the IP addresses
+### END INIT INFO
+let upSeconds="$(/usr/bin/cut -d. -f1 /proc/uptime)"
+
+
+
+
+
+# if [ $upSeconds -lt 3600 ]; then 	# for the first 60 minutes
+if [ $upSeconds -lt 300 ]; then 	# for the first 5 minutes
+	refresh=30			# refresh is faster 
+else					# than
+	refresh=120 			# afterwards. time in seconds
+fi
+
+
+
+
+### calculations
+
+callmyself=$0
+screenwidth=$(tput cols)
+screenheight=$(tput lines)
+let barwidth=$screenwidth-10	# give 10 chars for description "ram....:"
+if [ $barwidth -gt 70 ]; then barwidth=70; fi
+let secs=$((${upSeconds}%60))
+let mins=$((${upSeconds}/60%60))
+let hours=$((${upSeconds}/3600%24))
+let days=$((${upSeconds}/86400))
+UPTIME=`printf "%d d %02d h %02d m" "$days" "$hours" "$mins" `
+read one five fifteen rest < /proc/loadavg # get the load averages
+let memTotalKB=`cat /proc/meminfo | grep MemTotal | awk {'print $2'}`
+let memTotalMB=`awk "BEGIN {printf \"%.0f\n\", $memTotalKB / 1024}"`
+let memFreeKB=`cat /proc/meminfo | grep MemFree | awk {'print $2'}`
+let memFreeMB=`awk "BEGIN {printf \"%.0f\n\", $memFreeKB / 1024}"`
+let memUsedKB="$memTotalKB-$memFreeKB"	
+let memUsedMB=`awk "BEGIN {printf \"%.0f\n\", $memUsedKB / 1024}"`
+let memPercentFree=`awk "BEGIN {printf \"%.0f\n\", $memFreeKB / $memTotalKB *100}"`
+let memPercentUsed=`awk "BEGIN {printf \"%.0f\n\", $memUsedKB / $memTotalKB *100}"`
+let memPercentCheck="$memPercentFree + $memPercentUsed"
+externalIP="`wget -T 1 -q -O - http://icanhazip.com/  || echo "---" `"
+externalName=`host -W 1 $externalIP 2> /dev/null | cut -d " " -f 5 | rev | cut -d "." -f -6 | rev`
+eth0IP=`(/sbin/ifconfig eth0 | /bin/grep "inet" || echo "---") | /usr/bin/cut -d ":" -f 2 | /usr/bin/cut -d " " -f 1`
+eth0Mask=`(/sbin/ifconfig eth0 | /bin/grep "inet" || echo "---" ) | /usr/bin/cut -d ":" -f 4 | /usr/bin/cut -d " " -f 1`
+mgmtIP=`(/sbin/ifconfig eth0:1 | /bin/grep "inet" || echo "---") | /usr/bin/cut -d ":" -f 2 | /usr/bin/cut -d " " -f 1`
+mgmtMask=`(/sbin/ifconfig eth0:1 | /bin/grep "inet" || echo "---" ) | /usr/bin/cut -d ":" -f 4 | /usr/bin/cut -d " " -f 1`
+wlan0IP=`(/sbin/ifconfig wlan0 | /bin/grep "inet" || echo "---") | /usr/bin/cut -d ":" -f 2 | /usr/bin/cut -d " " -f 1`
+wlan0Mask=`(/sbin/ifconfig wlan0 | /bin/grep "inet" || echo "---" ) | /usr/bin/cut -d ":" -f 4 | /usr/bin/cut -d " " -f 1`
+wlan0ssid=`(wpa_cli status | grep ^ssid= | cut -d "=" -f 2) || echo ""`
+
+
+### functions
+function connectWPA {
+	wpaFailed=`wpa_cli status 2> /dev/null > /dev/null; echo $? `
+	if [ "$wpaFailed" == "255" ]; then
+		echo "ups... wpa_supplicant ist nicht gestartet... versuch' mal, ihn zu wecken..."
+	        wpa_supplicant -c /etc/wpa_supplicant/wpa_supplicant.conf -i wlan0 2>/dev/null &
+		return
+	fi
+	if [ "$wpaFailed" != "0" ]; then
+		echo "Da ging was schief. der wpa_supplicant ist nicht richtig gestartet..."
+		killall -TERM wpa_supplicant
+		return
+	fi
+	
+	
+	currentNetworkId=$(wpa_cli list_networks | grep CURRENT | cut -f 1)
+	currentNetworkName=$(wpa_cli list_networks | grep CURRENT | cut -f 2)
+	
+	if [ "$currentNetworkId" != "" ]; then 
+		# echo "wir sind schon verbunden... mit $currentNetworkName"
+		return
+	fi
+	
+	echo -n "scanning wlan..."
+	
+	wpa_cli scan > /dev/null 
+	
+	for i in $(seq 1 5); do echo -n "."; sleep 1; done;
+	
+	
+	for ssid in $(wpa_cli list_networks | grep -e "^[0-9]" | cut -f 2 | sed "s/ /./g"); do 
+			onair[${#onair[*]}]=`wpa_cli scan_results | grep "$ssid" | cut -f 5 | uniq `
+		   done 
+	
+	for i in $(seq 0 ${#onair[*]}); do
+		echo -n "${onair[${i}]} "
+	done
+	# echo -n "... "
+	
+	# echo -n "connecting ${onair[0]} ..."
+	
+	netid=`wpa_cli list_networks | grep ${onair[0]} | cut -f 1`
+	wpa_cli select_network $netid > /dev/null
+	
+	sleep 2
+	
+	statusSSID=$(wpa_cli status | grep "^ssid" | cut -d "=" -f 2)
+	statusWPA=$(wpa_cli status | grep "^wpa_state" | cut -d "=" -f 2)
+	
+	if [ "$statusSSID" == "${onair[0]}" ] && [ "$statusWPA" == "COMPLETED" ]; then
+		# echo
+		# echo "Glückwunsch. verbunden..."
+		# echo -n "noch auf eine IP warten..."
+		# for i in $(seq 1 7); do echo -n "."; sleep 1; done;
+		# ipAddr=$(ifconfig wlan0 | grep inet | cut -d ":" -f2 | cut -d " " -f 1)
+		# echo $ipAddr...fertig
+		return
+	fi
+	
+	if [ "$statusWPA" == "SCANNING" ]; then
+		echo -n "das wird nix..."
+		if [ "${onair[2]}" != "" ]; then
+			echo -n "ich versuch's mal bei ${onair[2]}..."
+			netid=`wpa_cli list_networks | grep "${onair[2]}" | cut -f 1`
+			wpa_cli select_network $netid > /dev/null
+		fi
+	fi
+	
+	echo "failed to wpa. sorry."
+	return
+}
+function shortMask {
+    nbits=0
+    IFS=.
+    for dec in $1 ; do
+        case $dec in
+            255) let nbits+=8;;
+            254) let nbits+=7;;
+            252) let nbits+=6;;
+            248) let nbits+=5;;
+            240) let nbits+=4;;
+            224) let nbits+=3;;
+            192) let nbits+=2;;
+            128) let nbits+=1;;
+            0);;
+	    ---) exit 0;;
+            *) echo "Error: $dec is not recognised"; exit 1
+        esac
+    done
+    echo "/$nbits"
+} 
+function membar {
+	# available colors:
+	# 0	Black
+	# 1	Red
+	# 2	Green
+	# 3	Yellow
+	# 4	Blue
+	# 5	Magenta
+	# 6	Cyan
+	# 7	White
+	# 8	Not used
+	# 9	Reset to default color
+
+	fgUsedColor=7
+	bgUsedColor=4
+
+	fgFreeColor=0
+	bgFreeColor=2
+
+	let memfreecount=$memPercentFree*$barwidth/100
+	let memusedcount=$barwidth-$memfreecount
+	let marginleft=$memusedcount/2-2
+	let marginright=$memusedcount-3-$marginleft
+	tput setaf $fgUsedColor; tput setab $bgUsedColor
+	for ((c=1;c<=$marginleft;c++)); do echo -n " "; done
+	if [ "$1" = "shownumbers" ]; then echo -n $(printf "%02d" "$memPercentUsed")%; else echo -n "   "; fi
+	for ((c=1;c<=$marginright;c++)); do echo -n " "; done
+	tput sgr0
+	let marginleft=$memfreecount/2-2
+	let marginright=$memfreecount-3-$marginleft
+	tput setaf $fgFreeColor; tput setab $bgFreeColor
+	for ((c=1;c<=$marginleft;c++)); do echo -n " "; done
+	if [ "$1" = "shownumbers" ]; then echo -n $(printf "%02d" "$memPercentFree")%; else echo -n "   "; fi
+	for ((c=1;c<$marginright;c++)); do echo -n " "; done 
+	tput sgr0
+	echo
+}
+function diskbar {
+	# available colors:
+	# 0	Black
+	# 1	Red
+	# 2	Green
+	# 3	Yellow
+	# 4	Blue
+	# 5	Magenta
+	# 6	Cyan
+	# 7	White
+	# 8	Not used
+	# 9	Reset to default color
+
+	fgUsedColor=7
+	bgUsedColor=1
+
+	fgFreeColor=0
+	bgFreeColor=2
+
+
+	let diskPercentUsed=`df -Ph | grep -E '^/dev/root' | awk '{print $5}' | cut -d "%" -f 1`
+	let diskPercentFree=100-$diskPercentUsed
+	let diskfreecount=$diskPercentFree*$barwidth/100
+	let diskusedcount=$barwidth-$diskfreecount
+	let marginleft=$diskusedcount/2-2
+	let marginright=$diskusedcount-3-$marginleft
+	tput setaf $fgUsedColor; tput setab $bgUsedColor
+	for ((c=1;c<=$marginleft;c++)); do echo -n " "; done
+	if [ "$1" = "shownumbers" ]; then echo -n $(printf "%02d" "$diskPercentUsed")%; else echo -n "   "; fi
+	for ((c=1;c<=$marginright;c++)); do echo -n " "; done
+	tput sgr0
+	let marginleft=$diskfreecount/2-2
+	let marginright=$diskfreecount-3-$marginleft
+	tput setaf $fgFreeColor; tput setab $bgFreeColor
+	for ((c=1;c<=$marginleft;c++)); do echo -n " "; done
+	if [ "$1" = "shownumbers" ]; then echo -n $(printf "%02d" "$diskPercentFree")%; else echo -n "   "; fi
+	for ((c=1;c<=$marginright;c++)); do echo -n " "; done 
+	tput sgr0
+	echo
+}
+function activateButtons {
+	a=`which gpio` || (echo "gpio not found. please  apt-get install wiringpi"; return)
+	gpio export 17 in # direction
+	gpio export 17 up # pull-up resistant
+	gpio export 22 in
+	gpio export 22 up
+	gpio export 23 in
+	gpio export 23 up
+	gpio export 27 in
+	gpio export 27 up
+	gpio mode 1 pwm
+}
+function menu {
+	# Button Nummer         27        23        22        17
+	echo    "$(tput setaf 6)     [reload]   [bcast ping] [wlan scan]";
+	echo -n "$(tput setaf 6)[+]     [aus]     [dunkel]   [hell] ";  
+}
+
+
+
+
+connectWPA # WiFi handling
+
+
+### OUTPUT
+
+clear
+
+echo "  _  $(tput setaf 1)${UPTIME}$(tput sgr0)"
+echo " | | $(tput setaf 1)${UPTIME}$(tput sgr0)"
+echo " | |    ___  _ __ ___ _ __  _______  "
+echo " | |   / _ \| '__/ _ \ '_ \|_  / _ \ "
+echo " | |__| (_) | | |  __/ | | |/ / (_) |"
+echo " |_____\___/|_|  \___|_| |_/___\___/ ${refresh}"
+                                      
+
+echo
+# echo -n "          "; membar
+echo -n ".ram....: "; membar shownumbers
+# echo -n "          "; membar
+tput setaf 1
+# echo
+# echo -n "          "; diskbar
+echo -n "$(tput sgr0).disk...: "; diskbar shownumbers
+# echo -n "          "; diskbar
+tput setaf 5; tput setab 0;
+echo ""
+echo -n "ip..eth0: "; if [ "$eth0IP" = "---" ]; then tput setaf 5; else tput setaf 2; fi; echo -n $eth0IP $(shortMask $eth0Mask) ; tput setaf 5
+if [ "$screenwidth" -lt 53 ]; then echo; echo -n "  "; fi
+echo -n "  mgmt: "; if [ "$mgmtIP" = "---" ]; then tput setaf 5; else tput setaf 4; fi; echo $mgmtIP $(shortMask $mgmtMask)  ; tput setaf 5
+echo -n "...wlan0: "; if [ "$waln0IP" = "---" ]; then tput setaf 5; else tput setaf 2; fi; echo -n $wlan0IP $(shortMask $wlan0Mask)
+if [ "$screenwidth" -lt 53 ]; then echo; echo -n "   "; fi
+echo "$(tput setaf 5) ssid:$(tput setaf 2) $wlan0ssid"; tput setaf 5
+echo -n "..public: "; if [ "$externalIP" = "---" ]; then tput setaf 5; else tput setaf 2; fi; echo -n $externalIP
+if [ "$screenwidth" -lt 53 ]; then echo; echo -n " "; fi
+echo "$(tput setaf 5) $externalName"
+
+tput sgr0
+
+	# available colors:
+	# 0	Black
+	# 1	Red
+	# 2	Green
+	# 3	Yellow
+	# 4	Blue
+	# 5	Magenta
+	# 6	Cyan
+	# 7	White
+	# 8	Not used
+	# 9	Reset to default color
+
+
+
+
+
+if [ "$screenwidth" -lt 53 ]; then 
+	for l in $(seq 1 8); do echo; done   # fill screen
+else
+	for l in $(seq 1 5); do echo; done
+fi
+
+
+
+
+
+### MAIN LOOP
+
+activateButtons
+menu
+
+let mrefresh=${refresh}*2
+
+for i in $(seq 1 $mrefresh); do 
+	# echo -n "$i "; 
+
+	# Buttons:  27    23    22    17
+
+	if [ $(gpio -g read 17) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
+		for i in $(seq 24 64 1024); do sleep 0.1; gpio pwm 1 $i; done
+	fi
+	if [ $(gpio -g read 22) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
+		for i in $(seq 1024 -64 24); do sleep 0.1; gpio pwm 1 $i; done	
+	fi
+	if [ $(gpio -g read 23) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
+		for i in $(seq 24 -3 0); do gpio pwm 1 $i; sleep 0.1; done
+	fi
+
+	# with + button :
+
+	if [ $(gpio -g read 17) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
+		tput sgr0
+		echo
+		echo
+		echo wlan scan
+		echo
+		wpa_cli scan 2> /dev/null > /dev/null
+		echo -n "scanning..."
+		for i in $(seq 0 5); do echo -n "."; sleep 1; done; echo
+		echo "signal  MHz   ssid"
+		wpa_cli scan_results | awk '{print $3"\t"$2"\t"$5" "$6" "$7}' | grep -e "^[0-9]" | sort -nr
+		echo
+		menu
+	fi
+	if [ $(gpio -g read 22) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
+		tput sgr0
+		echo
+		echo
+		echo broadcast ping
+		echo
+		for bcast in $(ifconfig | grep inet | grep Bcast | sed "s/^.*Bcast://" | cut -d " " -f 1 ); do 
+			echo "pinging $bcast";echo
+			ping -b -c 10 $bcast | sed "s/^.*from //" | sed "s/:.*time=/  /"
+		done 
+		sleep 5;
+		echo; echo "arp-tabelle"
+		echo
+		arp -an | awk '{print $4" "$2" "$7}'
+		echo
+		menu
+
+	fi
+	if [ $(gpio -g read 23) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
+		exec $(echo $callmyself)
+	fi
+		
+	
+	sleep 0.5;
+done
+
+ 
+
+exec $(echo $callmyself)
+
