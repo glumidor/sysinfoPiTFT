@@ -20,6 +20,10 @@ fi
 
 
 
+refresh=1
+
+
+
 ### calculations
 
 callmyself=$0
@@ -221,6 +225,34 @@ function diskbar {
 	tput sgr0
 	echo
 }
+function cpubar {
+	fgUsedColor=7
+	bgUsedColor=1
+
+	fgFreeColor=0
+	bgFreeColor=2
+
+	let cpuPercentUsed=$(echo $one*100/5 | bc || echo -n "")
+	let cpuPercentFree=100-$cpuPercentUsed
+	
+	let cpufreecount=$cpuPercentFree*$barwidth/100
+	let cpuusedcount=$barwidth-$cpufreecount
+	let marginleft=$cpuusedcount/2-2
+	let marginright=$cpuusedcount-3-$marginleft
+	tput setaf $fgUsedColor; tput setab $bgUsedColor
+	for ((c=1;c<=$marginleft;c++)); do echo -n " "; done
+	if [ "$1" = "shownumbers" ]; then echo -n $(printf "%02d" "$cpuPercentUsed")%; else echo -n "   "; fi
+	for ((c=1;c<=$marginright;c++)); do echo -n " "; done
+	tput sgr0
+	let marginleft=$cpufreecount/2-2
+	let marginright=$cpufreecount-3-$marginleft
+	tput setaf $fgFreeColor; tput setab $bgFreeColor
+	for ((c=1;c<=$marginleft;c++)); do echo -n " "; done
+	if [ "$1" = "shownumbers" ]; then echo -n $(printf "%02d" "$cpuPercentFree")%; else echo -n "   "; fi
+	for ((c=1;c<=$marginright;c++)); do echo -n " "; done 
+	tput sgr0
+	echo
+}
 function activateButtons {
 	a=`which gpio` || (echo "gpio not found. please  apt-get install wiringpi"; return)
 	gpio export 17 in # direction
@@ -254,6 +286,7 @@ echo "     $(tput setaf 1)${UPTIME}$(tput sgr0)"
 echo "     $(tput setaf 1)${one} ${five} ${fifteen} $(tput sgr0)"
 figlet -f standard `hostname`
                                       
+echo -n ".cpu....: "; cpubar # shownumbers
 # echo -n "          "; membar
 echo -n ".ram....: "; membar shownumbers
 # echo -n "          "; membar
@@ -293,9 +326,9 @@ tput sgr0
 
 
 if [ "$screenwidth" -lt 53 ]; then 
-	for l in $(seq 1 7); do echo; done   # fill screen
+	for l in $(seq 1 6); do echo; done   # fill screen
 else
-	for l in $(seq 1 4); do echo; done
+	for l in $(seq 1 3); do echo; done
 fi
 
 

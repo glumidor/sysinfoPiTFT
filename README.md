@@ -25,9 +25,9 @@ the script is aware of portrait and landscape mode (*/boot/config.txt*) and prin
 
 # Installation
 
-if not done yet, install figlet
+if not done yet, install figlet and bc
 
-	apt-get install figlet
+	apt-get install figlet bc
 
 copy the script into the directory /etc/init.d
 
