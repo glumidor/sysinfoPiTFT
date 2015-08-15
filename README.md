@@ -16,8 +16,19 @@ with figlet the hostname is printed out in a big font, so *apt-get install figle
 
 
 # Installation
+
+if not done yet, install figlet
+
+	apt-get install figlet
+
 copy the script into the directory /etc/init.d
 
-make it executable with chmod +x /etc/init.d/sysinfoPiTFT
+	cp sysinfoPiTFT/sysinfoPiTFT /etc/init.d/
 
-add to the runlevel handling with upgrade-rc.d sysinfoPiTFT defaults
+make it executable 
+
+	chmod +x /etc/init.d/sysinfoPiTFT
+
+add to the runlevel handling with 
+
+	upgrade-rc.d sysinfoPiTFT defaults
