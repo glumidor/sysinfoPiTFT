@@ -19,11 +19,6 @@ else					# than
 fi
 
 
-
-refresh=1
-
-
-
 ### calculations
 
 callmyself=$0
