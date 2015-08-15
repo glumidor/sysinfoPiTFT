@@ -11,17 +11,12 @@
 ### END INIT INFO
 let upSeconds="$(/usr/bin/cut -d. -f1 /proc/uptime)"
 
-
-
-
-
 # if [ $upSeconds -lt 3600 ]; then 	# for the first 60 minutes
 if [ $upSeconds -lt 300 ]; then 	# for the first 5 minutes
 	refresh=30			# refresh is faster 
 else					# than
 	refresh=120 			# afterwards. time in seconds
 fi
-
 
 
 
