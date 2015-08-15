@@ -45,4 +45,4 @@ When the script crashes, the boot sequence for this runleven is finished and you
 
 # Updating
 
-when updating the script, you just need to replace the */etc/init.d/sysinfoPiTFT* file
+when updating the script, you just need to replace the */etc/init.d/sysinfoPiTFT* file. it gets reloaded automatically
