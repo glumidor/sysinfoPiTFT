@@ -236,7 +236,7 @@ function activateButtons {
 	gpio export 23 up
 	gpio export 27 in
 	gpio export 27 up
-	gpio mode 1 pwm
+	gpio mode 1 pwm	# background illumitaion
 }
 function menu {
 	# Button Nummer         27        23        22        17
@@ -254,15 +254,11 @@ connectWPA # WiFi handling
 
 clear
 
-echo "  _  $(tput setaf 1)${UPTIME}$(tput sgr0)"
-echo " | | $(tput setaf 1)${UPTIME}$(tput sgr0)"
-echo " | |    ___  _ __ ___ _ __  _______  "
-echo " | |   / _ \| '__/ _ \ '_ \|_  / _ \ "
-echo " | |__| (_) | | |  __/ | | |/ / (_) |"
-echo " |_____\___/|_|  \___|_| |_/___\___/ ${refresh}"
-                                      
 
-echo
+echo "     $(tput setaf 1)${UPTIME}$(tput sgr0)"
+echo "     $(tput setaf 1)${one} ${five} ${fifteen} $(tput sgr0)"
+figlet -f standard `hostname`
+                                      
 # echo -n "          "; membar
 echo -n ".ram....: "; membar shownumbers
 # echo -n "          "; membar
