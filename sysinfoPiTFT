@@ -1,6 +1,6 @@
 #!/bin/bash
 ### BEGIN INIT INFO
-# Provides:           sysinfoTFT
+# Provides:           sysinfoPiTFT
 # Required-Start:    hostname $local_fs
 # Required-Stop:
 # Should-Start:
