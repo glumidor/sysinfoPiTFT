@@ -293,9 +293,9 @@ tput sgr0
 
 
 if [ "$screenwidth" -lt 53 ]; then 
-	for l in $(seq 1 8); do echo; done   # fill screen
+	for l in $(seq 1 7); do echo; done   # fill screen
 else
-	for l in $(seq 1 5); do echo; done
+	for l in $(seq 1 4); do echo; done
 fi
 
 
