@@ -11,7 +11,7 @@ To get more characters on your screen, *dpkg-reconfigure console-setup* and choo
 this gives you 40x26 (portrait) or 53x20 (landscape) characters
 the script is aware of portrait and landscape and prints a slightly different layout
 
-with figlet the hostname is printed out in a big font, so *apt-get install figlet* bevore.
+with figlet the hostname is printed out in a big font, so *apt-get install figlet* before.
 
 
 
