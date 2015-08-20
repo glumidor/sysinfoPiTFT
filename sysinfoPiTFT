@@ -51,7 +51,7 @@ let upSeconds="$(/usr/bin/cut -d. -f1 /proc/uptime)"
 if [ $upSeconds -lt 300 ]; then 	# for the first 5 minutes
 	refresh=10			# refresh is faster 
 else					# than
-	refresh=10 			# afterwards. time in seconds
+	refresh=120 			# afterwards. time in seconds
 fi
 callmyself=$0
 screenwidth=$(tput cols)
@@ -324,8 +324,7 @@ $myfiglet -f standard `hostname`
 
 echo -n ".cpu....: "; cpubar shownumbers
 echo -n ".ram....: "; membar shownumbers
-tput setaf 1
-echo -n "$(tput sgr0).disk...: "; diskbar shownumbers
+echo -n ".disk...: "; diskbar shownumbers
 echo
 tput setaf 5; tput setab 0;
 echo 
