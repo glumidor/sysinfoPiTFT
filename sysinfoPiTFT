@@ -17,19 +17,31 @@
 
 ### GENERAL SETTINGS
 
-screenAttached=true	# print colorful output on screen. for using as .bash_profile set to 0
-			# when set to 0, the script runs once without refresh
+screenAttached=false	# print colorful output on screen. for using as .bash_profile set to false
+			# when set to false, the script runs once without refresh
+
+buttonsAttached=false	# the new adafruit PiTFT came with four buttons attached. gpio 17 22 23 and 27
+			# if you have your own buttons, checkout the function activateButtons
+
+wifiAttached=false	# if you have an usb wifi dongle attached, wpa_supplicant will be present on your system
+			# configure your networks on your own, but this script will scan for available configured networks
+			# and tried to reconnect to them every run of the script. see also function connectWPA
+			# if you want to keep wifi in your hand, set it to false
 
 
 
 
 
+### check dependencies
 
+myfiglet=$(which figlet)
+if [ ! $myfiglet ]; then echo "kein figlet gefunden.     apt-get install figlet"; exit 1; fi
 
+mybc=$(which bc)
+if [ ! $mybc ];     then echo "kein bc gefunden.         apt-get install bc"; exit 1; fi
 
-
-
-
+mygpio=$(which gpio)
+if [ ! $mygpio ] && $buttonsAttached;   then echo "kein gpio gefunden.       apt-get install wiringpi";  exit 1; fi
 
 
 
@@ -39,7 +51,7 @@ let upSeconds="$(/usr/bin/cut -d. -f1 /proc/uptime)"
 if [ $upSeconds -lt 300 ]; then 	# for the first 5 minutes
 	refresh=10			# refresh is faster 
 else					# than
-	refresh=120 			# afterwards. time in seconds
+	refresh=10 			# afterwards. time in seconds
 fi
 callmyself=$0
 screenwidth=$(tput cols)
@@ -247,7 +259,7 @@ function cpubar {
 	fgFreeColor=0
 	bgFreeColor=2
 
-	let cpuPercentUsed=$(echo $one*100/5 | bc || echo -n "")
+	let cpuPercentUsed=$(echo $one*100/5 | $mybc || echo -n "")
 	let cpuPercentFree=100-$cpuPercentUsed
 	
 	let cpufreecount=$cpuPercentFree*$barwidth/100
@@ -269,16 +281,17 @@ function cpubar {
 	echo
 }
 function activateButtons {
-	a=`which gpio` || (echo "gpio not found. please  apt-get install wiringpi"; return)
-	gpio export 17 in # direction
-	gpio export 17 up # pull-up resistant
-	gpio export 22 in
-	gpio export 22 up
-	gpio export 23 in
-	gpio export 23 up
-	gpio export 27 in
-	gpio export 27 up
-	gpio mode 1 pwm	# background illumitaion
+	if $buttonsAttached && [ $mygpio ]; then
+	$mygpio export 17 in # direction
+	$mygpio export 17 up # pull-up resistant
+	$mygpio export 22 in
+	$mygpio export 22 up
+	$mygpio export 23 in
+	$mygpio export 23 up
+	$mygpio export 27 in
+	$mygpio export 27 up
+	$mygpio mode 1 pwm	# background illumitaion
+	fi
 }
 function menu {
 
@@ -296,30 +309,23 @@ function menu {
 
 
 
-connectWPA # WiFi handling
-
+if $wifiAttached; then connectWPA ; fi
+if $buttonsAttached; then activateButtons; fi
 
 ### OUTPUT
 
-if [ $screenAttached ]; then clear; fi
+if $screenAttached; then clear; fi
 
 
 echo "     $(tput setaf 1)${UPTIME}$(tput sgr0)"
 echo "     $(tput setaf 1)${one} ${five} ${fifteen} $(tput sgr0)"
-figlet -f standard `hostname`
-                                      
-if [ ! $screenAttached ]; then echo -n "          "; cpubar ;fi # just show when seen in terminal,
+
+$myfiglet -f standard `hostname`
+
 echo -n ".cpu....: "; cpubar shownumbers
-if [ ! $screenAttached ]; then echo -n "          "; cpubar ;fi
-echo
-if [ ! $screenAttached ]; then echo -n "          "; membar ;fi
 echo -n ".ram....: "; membar shownumbers
-if [ ! $screenAttached ]; then echo -n "          "; membar ;fi
-echo
 tput setaf 1
-if [ ! $screenAttached ]; then echo -n "          "; diskbar ;fi
 echo -n "$(tput sgr0).disk...: "; diskbar shownumbers
-if [ ! $screenAttached ]; then echo -n "          "; diskbar ;fi
 echo
 tput setaf 5; tput setab 0;
 echo 
@@ -353,34 +359,36 @@ tput sgr0
 
 
 
+if ! $screenAttached && ! $buttonsAttached; then echo; exit 0; fi
+
 
 
 ### MAIN LOOP
 
-if [ $screenAttached ]; then 
 
-	activateButtons
 
-	let mrefresh=${refresh}*2
-
-	for i in $(seq 1 $mrefresh); do 
-		# echo -n "$i "; 
+let mrefresh=${refresh}*2
+for i in $(seq 1 $mrefresh); do 
 	
+	sleep 0.5
+
+	if $buttonsAttached; then
+		
 		# Buttons:  27    23    22    17
 	
-		if [ $(gpio -g read 17) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
-			for i in $(seq 24 64 1024); do sleep 0.1; gpio pwm 1 $i; done
+		if [ $($mygpio -g read 17) == "0" ] && [ $($mygpio -g read 27) == "1" ]; then 
+			for i in $(seq 24 64 1024); do sleep 0.1; $mygpio pwm 1 $i; done
 		fi
-		if [ $(gpio -g read 22) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
-			for i in $(seq 1024 -64 24); do sleep 0.1; gpio pwm 1 $i; done	
+		if [ $($mygpio -g read 22) == "0" ] && [ $($mygpio -g read 27) == "1" ]; then 
+			for i in $(seq 1024 -64 24); do sleep 0.1; $mygpio pwm 1 $i; done	
 		fi
-		if [ $(gpio -g read 23) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
-			for i in $(seq 24 -3 0); do gpio pwm 1 $i; sleep 0.1; done
+		if [ $($mygpio -g read 23) == "0" ] && [ $($mygpio -g read 27) == "1" ]; then 
+			for i in $(seq 24 -3 0); do $mygpio pwm 1 $i; sleep 0.1; done
 		fi
 	
 		# with + button :
 	
-		if [ $(gpio -g read 17) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
+		if [ $($mygpio -g read 17) == "0" ] && [ $($mygpio -g read 27) == "0" ]; then 
 			tput sgr0
 			echo
 			echo
@@ -394,7 +402,7 @@ if [ $screenAttached ]; then
 			echo
 			menu
 		fi
-		if [ $(gpio -g read 22) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
+		if [ $($mygpio -g read 22) == "0" ] && [ $($mygpio -g read 27) == "0" ]; then 
 			tput sgr0
 			echo
 			echo
@@ -412,15 +420,11 @@ if [ $screenAttached ]; then
 			menu
 	
 		fi
-		if [ $(gpio -g read 23) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
+		if [ $($mygpio -g read 23) == "0" ] && [ $($mygpio -g read 27) == "0" ]; then 
 			exec $(echo $callmyself)
 		fi
 			
+	fi
+done
 		
-		sleep 0.5;
-	done
-fi	
-	 
-	
-if [ $screenAttached ]; then exec $(echo $callmyself); fi
-
+if $screenAttached; then exec $(echo $callmyself); fi
