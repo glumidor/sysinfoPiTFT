@@ -1,4 +1,5 @@
 #!/bin/bash
+
 ### BEGIN INIT INFO
 # Provides:           sysinfoPiTFT
 # Required-Start:    hostname $local_fs
@@ -9,18 +10,37 @@
 # Short-Description: shows sysinfo after booting
 # Description:       before logging in it shows ram an disk usage and the IP addresses
 ### END INIT INFO
-let upSeconds="$(/usr/bin/cut -d. -f1 /proc/uptime)"
 
-# if [ $upSeconds -lt 3600 ]; then 	# for the first 60 minutes
-if [ $upSeconds -lt 300 ]; then 	# for the first 5 minutes
-	refresh=30			# refresh is faster 
-else					# than
-	refresh=120 			# afterwards. time in seconds
-fi
+
+
+
+
+### GENERAL SETTINGS
+
+screenAttached=true	# print colorful output on screen. for using as .bash_profile set to 0
+			# when set to 0, the script runs once without refresh
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ### calculations
-
+let upSeconds="$(/usr/bin/cut -d. -f1 /proc/uptime)"
+# if [ $upSeconds -lt 3600 ]; then 	# for the first 60 minutes
+if [ $upSeconds -lt 300 ]; then 	# for the first 5 minutes
+	refresh=10			# refresh is faster 
+else					# than
+	refresh=120 			# afterwards. time in seconds
+fi
 callmyself=$0
 screenwidth=$(tput cols)
 screenheight=$(tput lines)
@@ -261,6 +281,13 @@ function activateButtons {
 	gpio mode 1 pwm	# background illumitaion
 }
 function menu {
+
+	if [ "$screenwidth" -lt 53 ]; then 
+		for l in $(seq 1 6); do echo; done   # fill screen
+	else
+		for l in $(seq 1 3); do echo; done
+	fi
+	
 	# Button Nummer         27        23        22        17
 	echo    "$(tput setaf 6)     [reload]   [bcast ping] [wlan scan]";
 	echo -n "$(tput setaf 6)[+]     [aus]     [dunkel]   [hell] ";  
@@ -274,24 +301,28 @@ connectWPA # WiFi handling
 
 ### OUTPUT
 
-clear
+if [ $screenAttached ]; then clear; fi
 
 
 echo "     $(tput setaf 1)${UPTIME}$(tput sgr0)"
 echo "     $(tput setaf 1)${one} ${five} ${fifteen} $(tput sgr0)"
 figlet -f standard `hostname`
                                       
-echo -n ".cpu....: "; cpubar # shownumbers
-# echo -n "          "; membar
+if [ ! $screenAttached ]; then echo -n "          "; cpubar ;fi # just show when seen in terminal,
+echo -n ".cpu....: "; cpubar shownumbers
+if [ ! $screenAttached ]; then echo -n "          "; cpubar ;fi
+echo
+if [ ! $screenAttached ]; then echo -n "          "; membar ;fi
 echo -n ".ram....: "; membar shownumbers
-# echo -n "          "; membar
+if [ ! $screenAttached ]; then echo -n "          "; membar ;fi
+echo
 tput setaf 1
-# echo
-# echo -n "          "; diskbar
+if [ ! $screenAttached ]; then echo -n "          "; diskbar ;fi
 echo -n "$(tput sgr0).disk...: "; diskbar shownumbers
-# echo -n "          "; diskbar
+if [ ! $screenAttached ]; then echo -n "          "; diskbar ;fi
+echo
 tput setaf 5; tput setab 0;
-echo ""
+echo 
 echo -n "ip..eth0: "; if [ "$eth0IP" = "---" ]; then tput setaf 5; else tput setaf 2; fi; echo -n $eth0IP $(shortMask $eth0Mask) ; tput setaf 5
 if [ "$screenwidth" -lt 53 ]; then echo; echo -n "  "; fi
 echo -n "  mgmt: "; if [ "$mgmtIP" = "---" ]; then tput setaf 5; else tput setaf 4; fi; echo $mgmtIP $(shortMask $mgmtMask)  ; tput setaf 5
@@ -320,81 +351,76 @@ tput sgr0
 
 
 
-if [ "$screenwidth" -lt 53 ]; then 
-	for l in $(seq 1 6); do echo; done   # fill screen
-else
-	for l in $(seq 1 3); do echo; done
-fi
-
 
 
 
 
 ### MAIN LOOP
 
-activateButtons
-menu
+if [ $screenAttached ]; then 
 
-let mrefresh=${refresh}*2
+	activateButtons
 
-for i in $(seq 1 $mrefresh); do 
-	# echo -n "$i "; 
+	let mrefresh=${refresh}*2
 
-	# Buttons:  27    23    22    17
-
-	if [ $(gpio -g read 17) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
-		for i in $(seq 24 64 1024); do sleep 0.1; gpio pwm 1 $i; done
-	fi
-	if [ $(gpio -g read 22) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
-		for i in $(seq 1024 -64 24); do sleep 0.1; gpio pwm 1 $i; done	
-	fi
-	if [ $(gpio -g read 23) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
-		for i in $(seq 24 -3 0); do gpio pwm 1 $i; sleep 0.1; done
-	fi
-
-	# with + button :
-
-	if [ $(gpio -g read 17) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
-		tput sgr0
-		echo
-		echo
-		echo wlan scan
-		echo
-		wpa_cli scan 2> /dev/null > /dev/null
-		echo -n "scanning..."
-		for i in $(seq 0 5); do echo -n "."; sleep 1; done; echo
-		echo "signal  MHz   ssid"
-		wpa_cli scan_results | awk '{print $3"\t"$2"\t"$5" "$6" "$7}' | grep -e "^[0-9]" | sort -nr
-		echo
-		menu
-	fi
-	if [ $(gpio -g read 22) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
-		tput sgr0
-		echo
-		echo
-		echo broadcast ping
-		echo
-		for bcast in $(ifconfig | grep inet | grep Bcast | sed "s/^.*Bcast://" | cut -d " " -f 1 ); do 
-			echo "pinging $bcast";echo
-			ping -b -c 10 $bcast | sed "s/^.*from //" | sed "s/:.*time=/  /"
-		done 
-		sleep 5;
-		echo; echo "arp-tabelle"
-		echo
-		arp -an | awk '{print $4" "$2" "$7}'
-		echo
-		menu
-
-	fi
-	if [ $(gpio -g read 23) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
-		exec $(echo $callmyself)
-	fi
-		
+	for i in $(seq 1 $mrefresh); do 
+		# echo -n "$i "; 
 	
-	sleep 0.5;
-done
-
- 
-
-exec $(echo $callmyself)
+		# Buttons:  27    23    22    17
+	
+		if [ $(gpio -g read 17) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
+			for i in $(seq 24 64 1024); do sleep 0.1; gpio pwm 1 $i; done
+		fi
+		if [ $(gpio -g read 22) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
+			for i in $(seq 1024 -64 24); do sleep 0.1; gpio pwm 1 $i; done	
+		fi
+		if [ $(gpio -g read 23) == "0" ] && [ $(gpio -g read 27) == "1" ]; then 
+			for i in $(seq 24 -3 0); do gpio pwm 1 $i; sleep 0.1; done
+		fi
+	
+		# with + button :
+	
+		if [ $(gpio -g read 17) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
+			tput sgr0
+			echo
+			echo
+			echo wlan scan
+			echo
+			wpa_cli scan 2> /dev/null > /dev/null
+			echo -n "scanning..."
+			for i in $(seq 0 5); do echo -n "."; sleep 1; done; echo
+			echo "signal  MHz   ssid"
+			wpa_cli scan_results | awk '{print $3"\t"$2"\t"$5" "$6" "$7}' | grep -e "^[0-9]" | sort -nr
+			echo
+			menu
+		fi
+		if [ $(gpio -g read 22) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
+			tput sgr0
+			echo
+			echo
+			echo broadcast ping
+			echo
+			for bcast in $(ifconfig | grep inet | grep Bcast | sed "s/^.*Bcast://" | cut -d " " -f 1 ); do 
+				echo "pinging $bcast";echo
+				ping -b -c 10 $bcast | sed "s/^.*from //" | sed "s/:.*time=/  /"
+			done 
+			sleep 5;
+			echo; echo "arp-tabelle"
+			echo
+			arp -an | awk '{print $4" "$2" "$7}'
+			echo
+			menu
+	
+		fi
+		if [ $(gpio -g read 23) == "0" ] && [ $(gpio -g read 27) == "0" ]; then 
+			exec $(echo $callmyself)
+		fi
+			
+		
+		sleep 0.5;
+	done
+fi	
+	 
+	
+if [ $screenAttached ]; then exec $(echo $callmyself); fi
 
